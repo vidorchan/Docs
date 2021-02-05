@@ -1,0 +1,151 @@
+BasicAuth:
+WebMvcConfigurer:添加拦截器，指定页面跳转等
+InterceptorHandlerAdapter:覆盖preHandle方法
+--缺点:直接访问link还是能成功。
+
+spring security
+UserDetailsServiceAutoCofiguration 默认用户user
+
+@EnbaleWebSecurity
+WebMvcConfigurer 配置加密策略、UserDetailsService装载用户信息（内存/数据库/）
+WebSecurityConfigurerAdapter HttpSecurity配置安全策略 
+SecurityContextHolder.getContext()获取上下文
+
+扩展点：
+1.自定义注入数据来源
+> 实现UserDetailsService
+2.密码解析器
+> BCryptPasswordEncoder
+3.自定义授权和安全拦截策略 http.
+> 自定义登录页面
+.formLogin().loginPage("/index.html").loginProcessingUrl("/index.html")
+登录按钮：请求/login
+>记住我
+.rememberMe().rememberMeParameter("rememberMe")
+>拦截策略
+.antMatchers()   从上往下，粒度越来越大
+
+csrf corss-site request forgery  跨站点请求伪造
+  CsrfFilter
+cors cross-origin resource sharing 跨域资源共享
+  CorsFilter
+
+异常处理
+@ControllerAdvice
+@ExceptionHandler
+
+原理：
+认证authentication 授权authorization
+WebSecurityConfiguration->springSecurityFilterChain(FilterChainProxy: SecurityFilterChain)
+AuthenticatioManager 认证管理器
+AccessDecisionManager 决策管理器
+
+SecurityContextPersistenceFilter 第一个
+
+UsernamePasswordAuthenticationFilter#attemptAuthentication   Authentication实例 UsernamePasswordAuthenticationToken
+AnonymousAuthenticationFilter 未登录进这里 Authentication实例 AnonymousAuthenticationToken
+---> 塞到AuthenticationManager#authenticate中
+ProviderManager支持多种认证方式
+AbstractUserDetailsAuthenticationProvider#authenticate
+	DaoAuthenticationProvider#retrieveUser 检索user ： this.getUserDetailsService().loadUserByUsername(username);
+	DaoAuthenticationProvider#additionalAuthenticationChecks 密码比较   找salt反射，这里没看懂
+
+
+FilterSecurityInterceptor--最后一个
+--->AccessDecisionManager#decide
+	AccessDecisionVoter#vote 投票   （赞成、拒绝、弃权）
+		AffirmativeBased一票通过、ConsensusBasesd多数通过、UnanimaousBased一票否决
+ExceptionTranslationFilter
+
+
+$2a$10$vTUDYhjnVb52iM3qQgi2Du31sq6PRea6xZbIsKIsmOVDnEuGb/.7K
+$是分割符，无意义；2a是bcrypt加密版本号；10是cost的值；而后的前22位是salt值；剩下：密文
+
+会话控制：
+建立的一个连接就是一个会话
+http.sessionManager().sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+server.servlet.session.timeout=3600s 
+http.sessionManagement()
+   .expiredUrl("/login‐view?error=EXPIRED_SESSION")  过期
+   .invalidSessionUrl("/login‐view?error=INVALID_SESSION");  sessionId失效
+server.servlet.session.cookie.http‐only=true 只能http访问，浏览器脚本无法访问
+server.servlet.session.cookie.secure=true 只能https
+http.stateless(true) --JWT时配置
+
+退出：
+http session失效
+清除securitycontextholder
+跳转到定义的地址
+
+logoutHandler 更重信息清理
+
+分布式认证方案：
+session：
+session复制，session粘贴，session集中存储
+客户端保存sessionId
+session存储在服务端
+
+token
+存储在客户端
+信息容易泄露，请求占用带宽
+
+统一认证服务UAA 
+网关
+
+OAuth2.0：三方之间的约定协议
+客户端，资源拥有者，资源服务器，认证服务器
+资源拥有者通过OAuth协议让客户端可以获取到自己的信息，客户端通过OAuth协议让资源拥有者访问受保护的资源
+clientDeatis-client id
+secret
+scope 获取哪方面的权限
+access_token
+grant_type
+userDetails-user_id 授权用户标识
+
+
+@EnableAuthorityServer
+
+
+
+---------------------
+AuthorizationServerConfigurerAdapter  
+
+ClientDetailsServiceConfigurer已经注册的所有的客户端详情信息
+AuthorizationServerEndpointsConfigurer 配置令牌token 和 令牌服务tokenservices
+AuthorizationServerSecurityConfigurer 配置令牌端点的安全约束
+
+AuthorizationServerTokenServices管理令牌
+TokenStore令牌持久化 -- db，redis,内存， JWt(撤销不行，大；服务器不用存储)
+------------------------
+
+------------------------
+@EnableGlobalMethodSecurity(prePostEnabled = true,securedEnabled = true)
+@EnableWebSecurity
+WebSecurityConfigurerAdapter
+
+oauth2 grant type-4种
+client_credentials: 足够信任，内部使用 clientid, secret,
+password: username,password,clientid, secret传到sso
+implicit简化模式: username,password,clientid, secret, scope传到sso，返回#token
+authorization_code：clientid, secret, scope,response_type=code传到sso,返回授权码code给资源服务器，资源服务器请求sso再次返回token。然后访问受保护资源的时候，再次请求资源服务器，验证token 2次请求的redirect_uri需要一样 code只能使用一次
+refresh_code
+
+
+
+-----------------------------------
+ResourceServerConfigurerAdapter
+ResourceServerSecurityConfigurer
+令牌解析：
+	DefaultTokenServices
+	RemoteTokenServices
+		需要注意授权服务器那边暴露/oauth/check_token   -- security.chekTokenAccess("permitAll()")
+
+authority=ROLE_rolename
+
+
+JWT json web token 简单的，自包含的协议格式
+HMAC算法或RSA算法的公私钥来签名
+防蹿改
+jwt令牌较长，占据的存储空间大；不能撤销令牌
+header payload signature
+JWTTokenStore
